@@ -68,11 +68,10 @@ sudo DEBIAN_FRONTEND=noninteractive \
 # If there is a single version of GCC and it's a single digit, as in e.g. GCC 9 on Ubuntu 20.04,
 # our clang won't detect it because it expects a version in the format x.y.z with all components
 # so let's create a symlink
-# note '2' in the test because of the \0
-if [ $(ls -1 '/usr/lib/gcc/x86_64-linux-gnu/' | wc -c) -eq 2 ] ; then
-  sudo ln -s "$(ls -1d /usr/lib/gcc/x86_64-linux-gnu/*)" "$(ls -1d /usr/lib/gcc/x86_64-linux-gnu/*).0.0"
-fi
-
+# 0 -> nothing, 2 -> a single dot (because there is also \0)
+GCC_VER=$(ls -1 /usr/lib/gcc/x86_64-linux-gnu/ | sort -V | tail -n 1)
+if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 0 ]; then sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0.0" ; fi
+if [ $(echo $GCC_VER | grep -Fo . | wc -c) -eq 2 ]; then sudo ln -s "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER" "/usr/lib/gcc/x86_64-linux-gnu/$GCC_VER.0" ; fi
 
 
 # ====
@@ -84,13 +83,12 @@ sudo DEBIAN_FRONTEND=noninteractive \
 
 # Install the right headers
 if [ "$OS" = 'linux' -o "$OS" = 'docker' ]; then
-  KERNEL_VER=$(uname -r | sed 's/-generic//')
   if [ "$OS" = 'docker' ]; then
       echo "Warning: the guest uses the host kernel,"
       echo " so the guest should be able to install headers for the host's kernel..."
   fi
 
-  sudo apt-get install -y "linux-headers-$KERNEL_VER" "linux-headers-${KERNEL_VER}-generic"
+  sudo apt-get install -y "linux-headers-generic"
 fi
 
 DPDK_RELEASE='20.08'
@@ -300,7 +298,7 @@ popd
 # LLVM required to build klee-uclibc
 # (including the libc necessary to build NFOS)
 sudo apt-get install -y bison flex zlib1g-dev libncurses5-dev \
-                        libcap-dev subversion python2.7
+                        libcap-dev python2.7
 
 # Python2 needs to be available as python for some configure scripts, which is not the case in Ubuntu 20.04
 if [ ! -e /usr/bin/python ] ; then
@@ -308,9 +306,11 @@ if [ ! -e /usr/bin/python ] ; then
 fi
 
 if [ ! -e "$BUILDDIR/llvm" ]; then
-  svn co https://llvm.org/svn/llvm-project/llvm/tags/RELEASE_342/final "$BUILDDIR/llvm"
-  svn co https://llvm.org/svn/llvm-project/cfe/tags/RELEASE_342/final "$BUILDDIR/llvm/tools/clang"
-  svn co https://llvm.org/svn/llvm-project/libcxx/tags/RELEASE_342/final "$BUILDDIR/llvm/projects/libcxx"
+  git clone --branch llvmorg-3.4.2 --depth 1 https://github.com/llvm/llvm-project "$BUILDDIR/llvm-project"
+  mv "$BUILDDIR/llvm-project/llvm" "$BUILDDIR/llvm"
+  mv "$BUILDDIR/llvm-project/clang" "$BUILDDIR/llvm/tools/clang"
+  mv "$BUILDDIR/llvm-project/libcxx" "$BUILDDIR/llvm/projects/libcxx"
+  rm -rf "$BUILDDIR/llvm-project"
   pushd "$BUILDDIR/llvm"
     CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=0" \
         ./configure --enable-optimized --disable-assertions \
@@ -376,7 +376,7 @@ if [ ! -e "$BUILDDIR/z3" ]; then
 
       # Weird, but required sometimes
       # Remove the outdated libz3.so
-      sudo apt-get remove  libz3-dev || true
+      sudo apt-get remove -y libz3-dev || true
       sudo rm -f /usr/lib/x86_64-linux-gnu/libz3.so || true
       sudo rm -f /usr/lib/x86_64-linux-gnu/libz3.so.4 || true
       sudo rm -f /usr/lib/libz3.so || true
