@@ -57,7 +57,7 @@ extern nfos_halt
 ;       - All the memory-mapped registers of the NICs are mapped in the lowest 4 GiB of memory
 
 
-section .text
+section .text.32
 BITS 32
 
 ; This is the entry point of NFOS, execution starts here
@@ -142,7 +142,7 @@ start:
     ; popping it into EAX, as before.
     pushfd
     pop eax
-
+    
     ; EBX contains the original value of EFLAGS, whereas EAX contains the value
     ; we just read back after attempting to set the value of the ID flag.
     ; Because the only bit that we modified before writing to EFLAGS with POPFD
@@ -416,6 +416,7 @@ start:
 
 
 ; Instruct the assembler to generate 64-bit code
+section .text.64
 BITS 64
 
 .64_bit:
